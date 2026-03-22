@@ -74,23 +74,42 @@ function init(self)
 	update_size(self,wanted_X,wanted_Y)
 end
 
-function fixed_update(self)
+function update(self)
 	render.set_depth_mask(true)
 	render.clear({[render.BUFFER_COLOR_BIT] = self.clear_color, [render.BUFFER_DEPTH_BIT] = 1, [render.BUFFER_STENCIL_BIT] = 0})
 
-	local w = render.get_window_width()
-	local h = render.get_window_height()
-	local min_size = math.min(w, h)
-	local max_size = math.max(w, h)
-	local offset = (max_size - min_size) / 2
-	render.set_viewport(w > h and offset or 0, w < h and offset or 0, min_size, min_size)
-	render.set_view(self.view)
+	local viewport_x = 0
+	local viewport_y = 0
+	local viewport_w = screen_width
+	local viewport_h = screen_height
+	local world_projection
 
-	screen_w=wanted_X
-	screen_h=wanted_Y
-	screen_offset_x=w > h and offset or 0
-	screen_width=min_size
-	screen_height=min_size
+	if fixedsize==1 then
+		local w = render.get_window_width()
+		local h = render.get_window_height()
+		local min_size = math.min(w, h)
+		local max_size = math.max(w, h)
+		local offset = (max_size - min_size) / 2
+		viewport_x = w > h and offset or 0
+		viewport_y = w < h and offset or 0
+		viewport_w = min_size
+		viewport_h = min_size
+
+		screen_w = wanted_X
+		screen_h = wanted_Y
+		screen_offset_x = viewport_x
+		screen_width = min_size
+		screen_height = min_size
+		world_projection = vmath.matrix4_orthographic(0, wanted_X, 0, wanted_Y, -1, 1)
+	else
+		update_size(self,wanted_X,wanted_Y)
+		viewport_w = screen_width
+		viewport_h = screen_height
+		world_projection = vmath.matrix4_orthographic(0, screen_w, 0, screen_h, -1, 1)
+	end
+
+	render.set_viewport(viewport_x, viewport_y, viewport_w, viewport_h)
+	render.set_view(self.view)
 
 	render.set_depth_mask(false)
 	render.disable_state(render.STATE_DEPTH_TEST)
@@ -99,14 +118,12 @@ function fixed_update(self)
 	render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)
 	render.disable_state(render.STATE_CULL_FACE)
 
-	render.set_projection(vmath.matrix4_orthographic(0, wanted_X, 0, wanted_Y, -1, 1))
-
+	render.set_projection(world_projection)
 	render.draw(self.tile_pred)
 	render.draw(self.particle_pred)
 	render.draw_debug3d()
 
-	--render.set_viewport(0, 0, screen_width, screen_height)
-	render.set_viewport(w > h and offset or 0, w < h and offset or 0, min_size, min_size)
+	render.set_viewport(viewport_x, viewport_y, viewport_w, viewport_h)
 	render.set_view(vmath.matrix4()) -- commentando questa riga si fa in modo che la gui segua il resto
 	render.set_projection(vmath.matrix4_orthographic(0, screen_w, 0, screen_h, -1, 1))
 
@@ -117,50 +134,6 @@ function fixed_update(self)
 
 	render.set_depth_mask(false)
 	render.draw_debug3d()
-end
-
-function normal_update(self)
-	render.set_depth_mask(true)
-	render.clear({[render.BUFFER_COLOR_BIT] = self.clear_color, [render.BUFFER_DEPTH_BIT] = 1, [render.BUFFER_STENCIL_BIT] = 0})
-
-	update_size(self,wanted_X,wanted_Y)
-	
-	render.set_viewport(0, 0, screen_width, screen_height)
-	render.set_view(self.view)
-
-	render.set_depth_mask(false)
-	render.disable_state(render.STATE_DEPTH_TEST)
-	render.disable_state(render.STATE_STENCIL_TEST)
-	render.enable_state(render.STATE_BLEND)
-	render.set_blend_func(render.BLEND_SRC_ALPHA, render.BLEND_ONE_MINUS_SRC_ALPHA)	
-	render.disable_state(render.STATE_CULL_FACE)
-
-	render.set_projection(vmath.matrix4_orthographic(0, screen_w, 0, screen_h, -1, 1))
-
-	render.draw(self.tile_pred)
-	render.draw(self.particle_pred)
-	render.draw_debug3d()
-
-	render.set_viewport(0, 0, screen_width, screen_height)
-	render.set_view(vmath.matrix4()) -- commentando questa riga si fa in modo che la gui segua il resto
-	render.set_projection(vmath.matrix4_orthographic(0, screen_w, 0, screen_h, -1, 1))
-	
-
-	render.enable_state(render.STATE_STENCIL_TEST)
-	render.draw(self.gui_pred)
-	render.draw(self.text_pred)
-	render.disable_state(render.STATE_STENCIL_TEST)
-
-	render.set_depth_mask(false)
-	render.draw_debug3d()
-end
-
-function update(self)
-	if fixedsize==1 then
-		fixed_update(self)
-	else
-		normal_update(self)
-	end
 end
 
 function on_message(self, message_id, message)
