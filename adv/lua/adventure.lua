@@ -823,17 +823,18 @@ function M.getreferencepos(self,val)
 		else
 			local dig=split(val,",")	
 			local start=dig[1]:sub(1, 1)
-			if start=="_" then
-				local movingpos
-				if cmdobj==nil then
-					movingpos=M.getactorpos(self,"me")
+				if start=="_" then
+					local movingpos
+					if cmdobj==nil then
+						movingpos=M.getactorpos(self,"me")
+					else
+						movingpos=M.getactorpos(self,cmdobj)
+					end
+					local offset_x=tonumber(dig[1]:sub(2)) or 0
+					pos_x=movingpos.x+offset_x
 				else
-					movingpos=M.getactorpos(self,cmdobj)
+					pos_x=tonumber(dig[1])
 				end
-				pos_x=movingpos.x+tonumber(dig[1]:sub(2))				
-			else
-				pos_x=tonumber(dig[1])
-			end
 			if dig[2] then
 				pos_y=tonumber(dig[2])
 			end
