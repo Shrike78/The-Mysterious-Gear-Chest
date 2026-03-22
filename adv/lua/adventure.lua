@@ -1,15 +1,65 @@
 local audio = require "adv/lua/audio"
 local config = require "adv/lua/config"
 local advcmd = require "adv/lua/cmd"
-local pathfind = require "adv/lua/pathfinding"
+-- local pathfind = require "adv/lua/pathfinding"
 local gop = require "adv/lua.gop"
+-- local game = require "adv/main"
 
 local slotname="slot01"
+
+local usehjt=0
+local hjtpath=localgamepath.."/main.hjt"
 
 local TRUE=1
 local FALSE=0
 
+function debug_dolog(code,cmd,cmdobj,val)
+	--local str=""
+	--if code then str=str..code else str=str.."_" end
+	--str=str..": "
+	--if cmd then str=str..cmd else str=str.."_" end
+	--str=str.." - "
+	--if cmdobj then str=str..cmdobj else str=str.."_" end
+	--str=str.." - "
+	--if val then str=str..val else str=str.."_" end
+	--print("log: "..str)
+end
+
+
 local posy_notdefined=-1234
+
+function keyadjust(key)
+	if key and key[1] then
+		if usehjt==0 then   
+			key=key[1]
+		end
+	end
+	return key
+end
+
+function offsetsplit(str)
+	local result = {}
+	local currentIndex = 1
+
+	while currentIndex <= #str do
+		local nextIndex = string.find(str, "[%+%-]", currentIndex)
+
+		if nextIndex then
+			local substring = string.sub(str, currentIndex, nextIndex-1)
+			table.insert(result, substring)
+			currentIndex = nextIndex
+			substring = string.sub(str, currentIndex)
+			table.insert(result, substring)
+			break
+		else
+			local substring = string.sub(str, currentIndex)
+			table.insert(result, substring)
+			break
+		end
+	end
+
+	return result
+end
 
 function split(s, delimiter)
 	result = {};
@@ -17,6 +67,14 @@ function split(s, delimiter)
 		table.insert(result, match);
 	end
 	return result;
+end
+
+function starts_with(str, start)
+	 return str~=nil and (str:sub(1, #start) == start)
+end
+
+function ends_with(str, ending)
+	return str~=nil and (ending == "" or str:sub(-#ending) == ending)
 end
 
 function varcmp(a,b,neg)
@@ -44,6 +102,31 @@ end
 global_hero=nil
 
 local M = {}
+
+function M.hotreload(self,full)		
+	local file=io.open(hjtpath,"r")
+	if file then
+		io.input(file)
+		local gamestring=io.read("*all")
+		io.close(file)				
+		M.game = treepad.decode(gamestring)	
+		gamestring=nil
+		if full then
+			M.loadbasics(self)
+			M.loadtheroom(self)					
+		end
+	end
+end
+
+function M.altload(self,full)		
+	local gamestring = sys.load_resource("/adv/json/main.hjt")
+	M.game = treepad.decode(gamestring)	
+	gamestring=nil
+	if full then
+		M.loadbasics(self)
+		M.loadtheroom(self)					
+	end	
+end
 
 function M.addfunct(self,cmd,funct,mode,bool)
 	local w={}
@@ -157,6 +240,7 @@ function M.loadlanguage(self)
 	M.addfunct(self,"setleader",M.dosetleader,"S")
 
 	M.addfunct(self,"setblock",M.dosetblock,"S")
+	M.addfunct(self,"unsetblock",M.dounsetblock,"S")
 
 	M.addfunct(self,"label",M.dolabel,"S")
 
@@ -243,14 +327,15 @@ end
 function M.getinventorydesc(self,item,name,wantedstatus)
 	local iteminfo=M.theobjects[name]
 	if iteminfo then
-		iteminfo=iteminfo[1]
+		iteminfo=keyadjust(iteminfo)
+		--if usehjt==0 then iteminfo=iteminfo[1] end
 		local status=iteminfo["onstatus"]		
 		if status then 
 			if wantedstatus==nil then wantedstatus="_" end
-			status=status[1] 
+			status=keyadjust(status)
 			if status and status[wantedstatus] then 
 				status=status[wantedstatus] 
-				status=status[1]
+				status=keyadjust(status)
 			else
 				status=nil
 			end
@@ -276,14 +361,14 @@ end
 function M.getactorselectordesc(self,item,name,wantedstatus)
 	local iteminfo=M.theactors[name]
 	if iteminfo then
-		iteminfo=iteminfo[1]
+		if usehjt==0 then iteminfo=iteminfo[1] end
 		local status=iteminfo["onstatus"]		
 		if status then 
 			if wantedstatus==nil then wantedstatus="_" end
-			status=status[1] 
+			status=keyadjust(status)
 			if status and status[wantedstatus] then 
 				status=status[wantedstatus] 
-				status=status[1]
+				status=keyadjust(status)
 			else
 				status=nil
 			end
@@ -312,7 +397,7 @@ function M.addtoinventory(self,name,status)
 		local item={}
 		local iteminfo=objects[name]
 		if iteminfo then
-			iteminfo=iteminfo[1]
+			iteminfo=keyadjust(iteminfo)
 			item["name"]=name
 			item["status"]=iteminfo["status"]
 			if status~=nil then
@@ -390,7 +475,7 @@ function M.addtoactorselector(self,name)
 		local item={}
 		local iteminfo=actors[name]
 		if iteminfo then
-			iteminfo=iteminfo[1]
+			iteminfo=keyadjust(iteminfo)
 			item["name"]=name
 			item["status"]=iteminfo["status"]
 			M.getactorselectordesc(self,item,name,item["status"])			
@@ -442,7 +527,7 @@ function M.getobjquickuse(self,val)
 				local quick=obj.quickuse	
 				quick=M.verbs.quick[quick]
 				if quick then		
-					quick=quick[1]
+					quick=keyadjust(quick)
 					return M.gettrad(self,"hud",quick.text)
 				else
 					return nil
@@ -480,23 +565,26 @@ function M.getglobalactor(self,val)
 	end
 end
 
-function M.fixundefinedy(self,val,actor)
+function M.fixundefinedy(self,val,actor,addednow)
 	local y=posy_notdefined
 	local usedy=nil
 	local doubley=nil
-	if M.tplayer and M.tplayer.pos and M.tplayer.pos.y~=posy_notdefined then
+	if M.tplayer and M.tplayer.pos and M.tplayer.pos.y~=posy_notdefined then--and addednow==nil then
 		usedy=math.floor(M.tplayer.pos.y)
 	end
-	for i,obj in ipairs(M.actors) do
-		if obj.name==val then
-			y=obj.pos.y
-		else
-			if obj.pos.y==posy_notdefined then
+	if addednow then
+	else
+		for i,obj in ipairs(M.actors) do
+			if obj.name==val then
+				y=obj.pos.y
 			else
-				if usedy and usedy==math.floor(obj.pos.y) then
-					doubley=usedy
+				if obj.pos.y==posy_notdefined then
 				else
-					usedy=math.floor(obj.pos.y)
+					if usedy and usedy==math.floor(obj.pos.y) then
+						doubley=usedy
+					else
+						usedy=math.floor(obj.pos.y)
+					end
 				end
 			end
 		end
@@ -510,7 +598,7 @@ function M.fixundefinedy(self,val,actor)
 		if actor and actor.size then
 			sy=actor.size.y
 		end
-		y=M.rectarea.y-M.rectarea.h-sy+4
+		y=M.rectarea.y-M.rectarea.h/2-sy/2
 	end
 	return y
 end
@@ -602,7 +690,7 @@ function M.doroomtemplate(self,CMD,cmd,cmdobj,val)
 		M.roomtemplate=M.thescenes[val]	
 	end
 	if M.roomtemplate then
-		M.roomtemplate=M.roomtemplate[1]
+		M.roomtemplate=keyadjust(M.roomtemplate)
 	end	
 end
 
@@ -709,18 +797,28 @@ end
 
 function M.getreferencepos(self,val)	
 	local dist=0
+	local offset=0
 	local pos_x=nil
 	local pos_y=nil
-	local actpos=M.getactorpos(self,val)
+	local actpos
+	local dig=nil
+	if type(val) == "string" then
+		dig=offsetsplit(val,"+-")	
+	end
+	if dig and dig[1]~="" and dig[2] then
+		val=dig[1]
+		offset=tonumber(dig[2])
+	end
+	actpos=M.getactorpos(self,val)
 	if actpos then 
 		local herosize=M.tplayer["size"]
-		pos_x=actpos.x
+		pos_x=actpos.x+offset
 		pos_y=actpos.y
 		dist=herosize.x
 	else
 		local objpos=M.getobjpos(self,val)
 		if objpos then
-			pos_x=objpos.x
+			pos_x=objpos.x+offset
 			pos_y=objpos.y
 		else
 			local dig=split(val,",")	
@@ -750,27 +848,31 @@ function M.domoveto(self,CMD,cmd,cmdobj,val)
 	local pos_x=nil
 	local pos_y=nil
 
+	debug_dolog("domoveto",cmd,cmdobj,val)
+
 	pos_x,pos_y,dist=M.getreferencepos(self,val)
 
-	local movepos
-	local moveactor
+	local movepos,moveactor,movesize
 	if cmdobj then		
 		local actor,actorobj=M.getselectedfromname(self,cmdobj)
 		movepos=actor.pos--M.getactorpos(self,cmdobj)
 		moveactor=actorobj--M.getactor(self,cmdobj)
+		movesize=actor.size
 		--if moveactor then
 			--moveactor=moveactor.obj
 		--end
 	else
 		movepos=gop.get(M.player).rposition--go.get_position(M.player)
 		moveactor=M.player
+		movesize=M.tplayer.size
 	end				
 	if cmd=="reach" or cmd=="areach" then 
 		dist=dist+16	
 	end
 	if movepos then
 		if math.abs(movepos.x-pos_x)>dist then
-			local pos
+			local pos,dest
+			local sdest=nil
 			if movepos.x<pos_x then
 				pos = vmath.vector3(pos_x-dist,movepos.y,0)
 			else
@@ -779,18 +881,9 @@ function M.domoveto(self,CMD,cmd,cmdobj,val)
 			if moveactor then
 				msg.post(moveactor, "look_at",{lookat=pos,mode="turn"})	
 			end			
-			if moveactor==M.player then
-				if M.rectarea then
-					if pos.x > M.rectarea.x+M.rectarea.w then
-						pos.x = M.rectarea.x+M.rectarea.w
-					end
-					if pos.x < M.rectarea.x then
-						pos.x = M.rectarea.x
-					end
-				end
-			end
+			sdest,dest=M.handlewalkarea(self,movepos,movesize,pos)			
 			if moveactor then
-				msg.post(moveactor, "move_to",{destination=pos,xonly=true,alert=true})			
+				msg.post(moveactor, "move_to",{destination=dest,sdestination=sdest,alert=true})			
 				walk=true
 			else
 				local odd
@@ -822,6 +915,14 @@ function M.doplaysound(self,CMD,cmd,cmdobj,val)
 end
 
 function M.doplaymusic(self,CMD,cmd,cmdobj,val)
+	local fadintimer=1
+	if val then
+		local sep=split(val,",")		
+		if sep and sep[2] then
+			val=sep[1]
+			fadintimer=tonumber(sep[2])/1000
+		end
+	end
 	if val=="" or val==nil or val=="_" then
 		val=nil
 		if M.music~=val then
@@ -832,9 +933,9 @@ function M.doplaymusic(self,CMD,cmd,cmdobj,val)
 		if M.music~=val then
 			M.music=val
 			if M.musicroom then
-				audio.playmusic(self,M.room..":/audio#"..M.music)
+				audio.playmusic(self,M.room..":/audio#"..M.music,fadintimer)
 			else			
-				audio.playmusic(self,"/audio#"..M.music)
+				audio.playmusic(self,"/audio#"..M.music,fadintimer)
 			end
 		end
 	end
@@ -933,8 +1034,14 @@ function M.dosay(self,CMD,cmd,cmdobj,val,cmdobjto)
 		local tpos=nil
 		local tsize=nil
 		local tcolor="#FFFFC0"
+		if (cmdobj=="me" or cmdobj=="player") and M.tplayer and M.tplayer.name then
+			cmdobj=M.tplayer.name
+		end
 		if cmdobj==nil or (M.tplayer and M.tplayer.name==cmdobj) then
-			M.talker=M.player							
+			M.talker=M.player		
+			if cmdobjto then
+				M.memory[cmdobjto.."_met"]=true
+			end
 			tpos=gop.get(M.player).rposition--go.get_position(M.player)
 			tsize=M.tplayer["size"]
 			if cmd=="think" then 
@@ -978,7 +1085,8 @@ function M.dosay(self,CMD,cmd,cmdobj,val,cmdobjto)
 			if tpos==nil then
 				tcolor=cmdobj
 				for j,actor in pairs(M.theactors) do	
-					local lactor=actor[1]
+					local lactor=actor
+					lactor=keyadjust(lactor)
 					if lactor.name==cmdobj then
 						tpos=lactor["pos"]
 						tsize=lactor["size"]
@@ -1079,6 +1187,8 @@ function M.dofaceto(self,CMD,cmd,cmdobj,val)
 end
 
 function M.dosetpos(self,CMD,cmd,cmdobj,val)
+	debug_dolog("dosetpos",cmd,cmdobj,val)
+	
 	local actor,actorobj=M.getselectedfromname(self,cmdobj)
 	if actorobj then 		
 
@@ -1268,6 +1378,7 @@ function M.doenterfrom(self,val,bkgsx,CMD,add)
 						advcmd.addcommand(self,l,"setstatus",fromroom..",closing")
 					end
 					if add then
+						advcmd.clonecommands(self,CMD,CMD.commands)
 						advcmd.insertcommands(self,CMD,CMD.commandspos+1,l)
 					end
 					break
@@ -1464,7 +1575,9 @@ function M.dosetanim(self,CMD,cmd,cmdobj,val)
 		val=v[2]
 	end
 	if val=="" or val==nil or val=="_" then
-		msg.post(actorobj,"unlockanim")
+		if actorobj then
+			msg.post(actorobj,"unlockanim")
+		end
 	else
 		if actorobj then
 			
@@ -1533,17 +1646,91 @@ function M.dosetleader(self,CMD,cmd,cmdobj,val)
 	end
 end
 
+function M.dounsetblock(self,CMD,cmd,cmdobj,val)
+	local sep=split(val,",")	
+	msg.post(M.player,"delblockingarea",{name=sep[1]})
+	for j,obj in ipairs(M.tplayers) do	
+		if obj.name==sep[1] then
+			obj.blocking=nil
+			obj.blockingalert=nil
+			obj.blockingsize=nil
+			obj.blockingpos=nil			
+			return
+		end
+	end
+	for j,obj in ipairs(M.elements) do
+		if obj.name==sep[1] then
+			obj.blocking=nil
+			obj.blockingalert=nil
+			obj.blockingsize=nil
+			obj.blockingpos=nil	
+			memoryref=M.room.."_"..obj.name
+			M.memory[memoryref.."_blockingalert"]=nil
+			M.memory[memoryref.."blockingsize"]=nil
+			break				
+		end
+	end
+end
+
 function M.dosetblock(self,CMD,cmd,cmdobj,val)
 	local v=split(val,",")
-	for i,obj in ipairs(M.actors) do
-		if obj.name==v[1] then
-			selected=obj.obj		
-			obj.pos=go.get_position(selected)
-			obj.blocking=true
-			obj.blockingalert=v[2]
-			msg.post(M.player,"addblockingarea",{pos=obj.pos,size=obj.size,name=obj.name,alert=v[2]})														
-			break
+	local range=split(v[1],"-")
+	local alertfunct=v[2]
+	local foundobj=nil
+	local memoryref=nil
+	if range[1] and range[2] then
+		local obj={}		
+		local r1=tonumber(range[1])
+		local r2=tonumber(range[2])
+		obj.pos=vmath.vector3()
+		obj.size=vmath.vector3()
+		obj.pos.x=(r1+r2)/2
+		obj.size.x=(r2-r1)/2		
+		obj.blocking=true
+		obj.blockingalert=v[2]
+		msg.post(M.player,"addblockingarea",{pos=obj.pos,size=obj.size,name=v[1],alert=alertfunct})														
+	else
+		local offset=split(v[1],"+")		
+		local offsetval=0
+		local name=offset[1]
+		if offset[2] then		
+			offsetval=tonumber(offset[2])
 		end
+		for i,obj in ipairs(M.actors) do
+			if obj.name==name then
+				foundobj=obj
+				break
+			end
+		end
+		if foubdobj==nil then
+			for j,obj in ipairs(M.elements) do
+				if obj.name==name then
+					foundobj=obj
+					memoryref=M.room.."_"..obj.name
+					break				
+				end
+			end
+		end
+		if foundobj then
+			local size=vmath.vector3()
+			size.x=foundobj.size.x+offsetval
+			size.y=foundobj.size.y
+			selected=foundobj.obj		
+			foundobj.pos=go.get_position(selected)
+			
+			foundobj.blockingpos=foundobj.pos
+			foundobj.blockingsize=size
+			foundobj.blocking=true
+			foundobj.blockingalert=alertfunct
+
+			if memoryref then
+				M.memory[memoryref.."_blockingalert"]=foundobj.blockingalert
+				M.memory[memoryref.."_blockingsize"]=foundobj.blockingsize
+			end
+			
+			msg.post(M.player,"addblockingarea",{pos=foundobj.pos,size=size,name=foundobj.name,alert=alertfunct})														
+			return
+		end			
 	end
 end
 
@@ -1553,7 +1740,7 @@ function M.addtolocalinventory(self,name,actor,status)
 		local item={}
 		local iteminfo=objects[name]
 		if iteminfo then
-			iteminfo=iteminfo[1]
+			iteminfo=keyadjust(iteminfo)
 			item["name"]=name
 			item["status"]=iteminfo["status"]
 			if status~=nil then
@@ -1689,6 +1876,7 @@ function M.doswitch(self,val)
 					M.tplayer.reloadpos=gop.get(M.player).rposition--go.get_position(M.player)
 					M.tplayer.pos=gop.get(M.player).rposition
 				end
+				M.activeplayername=actor.desc
 				M.tplayer.hudinventory=M.hudinventory				
 				M.tplayer.hudinventorycnt=M.hudinventorycnt
 				M.tplayer.myinventory=M.myinventory
@@ -1760,6 +1948,14 @@ function M.dosetroomstatus(self,CMD,cmd,cmdobj,val)
 	else
 		M.memory[M.room.."_status"]=val
 	end
+end
+
+function M.dosetconfigval(self,val)	   
+	local v=split(val,",")
+	local what=v[1]				
+	local value=v[2]               
+	config[what]=value
+	config.save(self)
 end
 
 function M.dosetconfig(self,CMD,cmd,cmdobj,val,cmdtootbj,silent)	                  
@@ -1835,7 +2031,8 @@ function M.showdlg(self,name)
 	local content=M.dlgs[name]
 	if content then
 		M.resetaction(self)
-		msg.post("hud", "showdlg",{name=name,content=content[1]})
+		content=keyadjust(content)
+		msg.post("hud", "showdlg",{name=name,content=content})
 		return true
 	else
 		return false
@@ -1912,11 +2109,19 @@ function M.checkconditions(self,conditions,wsuffix)
 		
 		vname=v..suffix
 		val=M.memory[vname]
+
+		if string.sub(vname,1, 5)=='once_' then
+			if M.memory[vname] then
+				local set=1
+			end
+		end
+		
 		if neg and val then
 			return false
 		elseif neg==nil and val==nil then
 			return false
 		end
+		
 	end
 	return true
 end
@@ -1955,8 +2160,8 @@ function M.doshowobj(self,CMD,cmd,cmdobj,val)
 	local sep=split(val,",")
 	local vsible
 	if cmd=="showobj" then visible=true else visible=false end
-	if sep[2] then -- show / hide in other rooms
-		local nm=sep[2].."_"..sep[1].."_visible"
+	if cmdobj then -- show / hide in other rooms
+		local nm=cmdobj.."_"..sep[1].."_visible"
 		if visible==true then
 			M.memory[nm]=1
 		else
@@ -2013,11 +2218,13 @@ function M.dotake(self,CMD,cmd,cmdobj,obj)
 	M.memory[what]=true
 	if cmdobj and cmdobj~=M.tplayer.name then
 		local a=M.getglobalactor(self,cmdobj)
-		if a and a.myinventory then
-			a.myinventory[val]=true				
-			M.addtolocalinventory(self,val,a)
+		if a then
+			if a.myinventory~=nil then			
+				a.myinventory[val]=true				
+				M.addtolocalinventory(self,val,a)
+			end
 		end
-	else			
+	else					
 		M.myinventory[val]=true
 		M.addtoinventory(self,val)
 		M.updateinventory(self)
@@ -2069,18 +2276,33 @@ function M.ifcheck(self,CMD,cmd,val,cmdobj)
 		if M.memory[what]==nil then
 			CMD.conditional=1
 		end					
-		return true												
+		return true						
+	elseif cmd=="iftaken" then
+		advcmd.addcondition(self,CMD)		
+		if M.checkconditions(self,val,"_taken") == true then
+			CMD.conditional=1
+		end					
+		return true
+	elseif cmd=="ifnottaken" then
+		local what=val.."_taken"
+		advcmd.addcondition(self,CMD)		
+		if M.memory[what]==nil then
+			CMD.conditional=1
+		end		
+		return true		
 	elseif cmd=="ifvisited" then
 		advcmd.addcondition(self,CMD)		
 		val=M.normalizeroom(self,val)
-		if M.visited[val] then
+		local what=val.."_visited"
+		if M.memory[what]==true then
 			CMD.conditional=1
 		end					
 		return true
 	elseif cmd=="ifnotvisited" then
 		advcmd.addcondition(self,CMD)	
 		val=M.normalizeroom(self,val)
-		if M.visited[val] == nil then
+		local what=val.."_visited"
+		if M.memory[what]==nil then
 			CMD.conditional=1
 		end					
 		return true
@@ -2090,6 +2312,40 @@ function M.ifcheck(self,CMD,cmd,val,cmdobj)
 		if  M.memory[cmdobj.."_status"]==val then
 			CMD.conditional=1
 		end					
+		return true		
+	elseif cmd=="ifstatus" then
+		local check=false
+		local sep=split(val,",")
+		local name=sep[1]
+		local status=sep[2]
+		advcmd.addcondition(self,CMD)				
+		for j,obj in ipairs(M.tplayers) do
+			if obj.name==name then
+				if obj.status==status then				
+					check=true
+					break
+				end
+			end
+		end	
+		for j,obj in ipairs(M.hudinventory) do
+			if obj.name==name then				
+				if obj.status==status then
+					check=true
+					break
+				end
+			end
+		end
+		for j,obj in ipairs(M.elements) do	
+			if obj.name==name then				
+				if M.memory[M.room.."_"..obj.name.."_status"]==status then
+					check=true
+					break
+				end
+			end
+		end	
+		if check==true then
+			CMD.conditional=1
+		end	
 		return true		
 	elseif cmd=="ifroom" then
 		advcmd.addcondition(self,CMD)		
@@ -2120,25 +2376,12 @@ function M.ifcheck(self,CMD,cmd,val,cmdobj)
 		if actor and M.checkpropertiesconditions(self,val,actor,"prop") then
 			CMD.conditional=1
 		end					
-		return true
+		return true	
 	elseif cmd=="ifactor" then
 		advcmd.addcondition(self,CMD)		
 		if M.tplayer.name==val then
 			CMD.conditional=1
 		end			
-		return true
-	elseif cmd=="iftaken" then
-		advcmd.addcondition(self,CMD)		
-		if M.checkconditions(self,val,"_taken") == true then
-			CMD.conditional=1
-		end					
-		return true
-	elseif cmd=="ifnottaken" then
-		local what=val.."_taken"
-		advcmd.addcondition(self,CMD)		
-		if M.memory[what]==nil then
-			CMD.conditional=1
-		end		
 		return true
 	elseif cmd=="ificon" then
 		advcmd.addcondition(self,CMD)		
@@ -2186,6 +2429,32 @@ function M.ifcheck(self,CMD,cmd,val,cmdobj)
 			CMD.conditional=1
 		end	
 		return true	
+	elseif cmd=="ifnear" then		
+		local check=false
+		local sep=split(val,",")
+		local name=sep[1]
+		local status=sep[2]
+		advcmd.addcondition(self,CMD)				
+		for j,obj in ipairs(M.tplayers) do
+			if obj.name==name then
+				if math.abs(obj.pos.x-M.tplayer.pos.x)<math.max(obj.size.x,M.tplayer.size.x) then
+					check=true
+					break
+				end
+			end
+		end	
+		for j,obj in ipairs(M.elements) do	
+			if obj.name==name then				
+				if math.abs(obj.pos.x-M.tplayer.pos.x)<math.max(obj.size.x,M.tplayer.size.x) then
+					check=true
+					break
+				end
+			end
+		end	
+		if check == true then
+			CMD.conditional=1
+		end	
+		return true			
 	elseif cmd=="ifset" then
 		local sep=split(val,",")
 		advcmd.addcondition(self,CMD)		
@@ -2345,7 +2614,7 @@ function M.playcommands(self,CMD,consolemode)
 								end
 							end									
 						elseif cmd=="setvisited" then
-							M.dosetvisited(self,val)														
+							M.dosetvisited(self,val,true)														
 						elseif cmd=="modifyicon" then
 							local sep=split(val,",")
 							local obj,i=M.getfrominventory(self,sep[1])
@@ -2379,16 +2648,6 @@ function M.playcommands(self,CMD,consolemode)
 						elseif cmd=="loadroom" then			
 							M.doloadroom(self,val)													
 							break
-						elseif cmd=="unsetblock" then	
-							local sep=split(val,",")	
-							msg.post(M.player,"delblockingarea",{name=sep[1]})
-							for j,actor in ipairs(M.tplayers) do	
-								if actor.name==sep[1] then
-									actor.blocking=nil
-									actor.blockingalert=nil
-									break
-								end
-							end
 						elseif cmd=="stop" then		
 							if M.tplayer and M.tplayer.name==val then
 								msg.post(M.player,"stop",{name=val})
@@ -2421,9 +2680,14 @@ function M.playcommands(self,CMD,consolemode)
 								end
 							end						
 						elseif cmd=="musicfadeout" then	
-							if M.music~=val then
-								audio.fade_out(self)
-								advcmd.setwaitfor(self,CMD,advcmd.WAITFORFORCEDWAIT,0.5)
+							local sep=split(val,",")
+							if M.music~=sep[1] then
+								local fade=1000
+								local fading 
+								if sep[2] then fade=tonumber(sep[2]) end
+								fading=fade/1000
+								audio.fade_out(self,fading)
+								advcmd.setwaitfor(self,CMD,advcmd.WAITFORFORCEDWAIT,fading)
 							end
 						elseif cmd=="showtasks" then	
 							M.doshowtasks(self,CMD,val,cmdobj)		
@@ -2523,13 +2787,13 @@ function M.getcmd(self,obj,action,kind)
 		if roomstatus then			
 			local statusrelatedactions=M.theroom["onstatus_"..roomstatus]
 			if statusrelatedactions then
-				statusrelatedactions=statusrelatedactions[1]
+				statusrelatedactions=keyadjust(statusrelatedactions)
 				local theobj=statusrelatedactions[obj]
 				if theobj==nil and M.roomtemplate then
 					theobj=M.roomtemplate[obj]
 				end
 				if theobj then
-					theobj=theobj[1]
+					theobj=keyadjust(theobj)
 					local theact=theobj[action]
 					if theact then
 						return theact
@@ -2540,13 +2804,13 @@ function M.getcmd(self,obj,action,kind)
 		if M.tplayer and M.tplayer.name then 
 			local actorrelatedactions=M.theroom["onactor_"..M.tplayer.name]
 			if actorrelatedactions then
-				actorrelatedactions=actorrelatedactions[1]
+				actorrelatedactions=keyadjust(actorrelatedactions)
 				local theobj=actorrelatedactions[obj]
 				if theobj==nil and M.roomtemplate then
 					theobj=M.roomtemplate[obj]
 				end
 				if theobj then
-					theobj=theobj[1]
+					theobj=keyadjust(theobj)
 					local theact=theobj[action]
 					if theact then
 						return theact
@@ -2560,7 +2824,7 @@ function M.getcmd(self,obj,action,kind)
 				theobj=M.roomtemplate[obj]
 			end
 			if theobj then
-				theobj=theobj[1]
+				theobj=keyadjust(theobj)
 				local theact=theobj[action]
 				if theact then
 					return theact
@@ -2581,11 +2845,11 @@ function M.getcmd(self,obj,action,kind)
 			end
 		end
 		if what then
-			what=what[1]
+			what=keyadjust(what)
 			local onaction=what["onaction"]
 			if onaction then
 				local theact=nil
-				onaction=onaction[1]
+				onaction=keyadjust(onaction)
 				if status then theact=onaction[status.."_"..action] end
 				if theact==nil then theact=onaction[action] end
 				return theact
@@ -2605,7 +2869,8 @@ function M.readactiveconfig(self)
 	else
 		config=M.game["config"]		
 	end
-	return config[1]
+	config=keyadjust(config)
+	return config
 end
 
 function M.readbasesets(self,baseset,container,val,suffix)
@@ -2653,13 +2918,12 @@ function M.readbase(self,config)
 	M.readbaseinventory(self,config["baseinventory"])
 	M.readbaseactors(self,config["basecharacters"])	
 	M.readbasesets(self,config["baseset"],M.memory,true)
-	M.readbasesets(self,config["basevisited"],M.visited,1)
+	M.readbasesets(self,config["basevisited"],M.memory,true,"_visited")	
 	M.readbasesets(self,config["basemet"],M.memory,true,"_met")	
 	M.readbasesets(self,config["baseknown"],M.memory,true,"_known")	
 end
 
 function M.resetvars(self)
-	M.visited={}
 	M.tasks={}
 	M.memory={}	
 	M.lastmusic={}
@@ -2717,7 +2981,7 @@ end
 
 function M.addbtn(self,hpause)
 	if  hpause then
-		hpause=hpause[1]
+		hpause=keyadjust(hpause)
 		local pause={}
 		pause.icon=hpause["icon"]
 		pause.anchor=hpause["anchor"] or "topcenter"
@@ -2745,6 +3009,7 @@ function M.defactorread(self,other,actor,actorbasename)
 	else
 		other["animset"]=actor["animset"]
 	end
+	other.atlas=actor.atlas
 	other["fulldesc"]=actor["fulldesc"]
 	other["size"]=M.getsize(actor["size"],40,80)
 	other["saycolor"]=actor["saycolor"] or "white"
@@ -2753,18 +3018,18 @@ function M.defactorread(self,other,actor,actorbasename)
 	other["room"]=actor["room"]		
 	other["status"]=actor["status"]	
 	other["onstatus"]=actor["onstatus"]
-	if other["onstatus"] then
-		other["onstatus"]=other["onstatus"][1]
+	if other.onstatus then
+		other.onstatus=keyadjust(other.onstatus)
 	end
 end
 
 function M.setmousebuttons(self,which)
 	local hud=M.game["hud"]
 	if hud then
-		hud=hud[1]		
+		hud=keyadjust(hud)
 		local general_v=hud["verbs"]	
 		if general_v then	
-			general_v=general_v[1]
+			general_v=keyadjust(general_v)
 				
 			if which=="left" then
 				M.verbs.dragwith="right" --general_v["dragwith"] or "left"
@@ -2791,11 +3056,59 @@ function M.setmousebuttons(self,which)
 	end
 end
 
+function M.addverblist(self,vv,pos)
+	for cmd, content in pairs(vv) do
+		content=keyadjust(content)
+		local other={}
+		if content.pos then 
+			pos=math.abs(content["pos"])
+		else
+			pos=pos+1
+		end
+		other["cmd"]=cmd
+		other["pos"]=pos
+		other["acton"]=content["acton"]
+		other["prep"]=content["double"]
+		other["drag"]=content["drag"]
+		local icon=content["icon"]
+		if icon then
+			other["icon"]=icon
+		else
+			other["icon"]=M.lang..".cmd."..cmd
+		end
+		local text=M.gettrad(self,"hud",content["text"])
+		if text then
+			other["text"]=text					
+		else
+			other["text"]=cmd					
+		end
+		if cmd=="lookat" then
+			if M.short then
+				other["text"]=nil
+			else
+				M.verbs.lookat=other["text"]
+			end
+		end						
+		other["deftext"]=M.gettrad(self,"hud",content["deftext"])
+		if cmd == "use" then
+			M.verbs.usedeftext=other.deftext
+		end
+		if content["reach"] then
+			other["reach"]=math.abs(content["reach"])
+		end
+		M.verbs.list[cmd]=other
+		if pos > M.verbs.listcnt then 
+			M.verbs.listcnt=pos 
+		end
+	end
+	return pos
+end
+
 function M.loadverbs(self,hud)
 	local general_v=hud["verbs"]	
 	if general_v then	
 		local t	
-		general_v=general_v[1]
+		general_v=keyadjust(general_v)
 		M.verbs.showmode=general_v["showmode"]
 		M.verbs.ignoreplayer=general_v["ignoreplayer"]
 		M.verbs.grid=M.getgrid(self,general_v)		
@@ -2817,50 +3130,19 @@ function M.loadverbs(self,hud)
 		M.getblank(self,M.verbs,general_v)
 		local quick=general_v["quickuse"]
 		if quick then
-			M.verbs.quick=quick[1]
+			quick=keyadjust(quick)
+			M.verbs.quick=quick
 		end
 		local list=general_v["list"]
 		M.verbs.list={}
 		M.verbs.listcnt=0
+		local pos=0
 		if list then
-			for kk, vv in pairs(list) do
-				for cmd, content in pairs(vv) do
-					content=content[1]
-					local other={}
-					kk=math.abs(content["pos"])
-					other["cmd"]=cmd
-					other["pos"]=kk
-					other["acton"]=content["acton"]
-					other["prep"]=content["double"]
-					other["drag"]=content["drag"]
-					local icon=content["icon"]
-					if icon then
-						other["icon"]=icon
-					else
-						other["icon"]=M.lang..".cmd."..cmd
-					end
-					local text=M.gettrad(self,"hud",content["text"])
-					if text then
-						other["text"]=text					
-					else
-						other["text"]=cmd					
-					end
-					if cmd=="lookat" then
-						if M.short then
-							other["text"]=nil
-						else
-							M.verbs.lookat=other["text"]
-						end
-					end						
-					other["deftext"]=M.gettrad(self,"hud",content["deftext"])
-					if cmd == "use" then
-						M.verbs.usedeftext=other.deftext
-					end
-					if content["reach"] then
-						other["reach"]=math.abs(content["reach"])
-					end
-					M.verbs.list[cmd]=other
-					if kk > M.verbs.listcnt then M.verbs.listcnt=kk end
+			if usehjt==1 then
+				pos=M.addverblist(self,list,pos)
+			else
+				for kk, vv in pairs(list) do
+					pos=M.addverblist(self,vv,pos)
 				end
 			end
 		end			
@@ -2888,7 +3170,7 @@ function M.setlanguage(self,lang)
 	M.txt = json.decode(M.txtstring)	
 	local hud=M.game["hud"]
 	if hud then
-		hud=hud[1]
+		hud=keyadjust(hud)
 		M.loadverbs(self,hud)
 		msg.post("hud", "hud_updatelanguage",{dad=msg.url(".")})
 	end	
@@ -2901,7 +3183,7 @@ function M.loadTPLAYERS(self)
 		local name=kk
 		local actor=M.theactors[name]
 		if actor then
-			actor=actor[1]
+			actor=keyadjust(actor)
 			if 0==1 then -- name==M.playername then
 				M.defactorread(self,M.tplayer,actor)				
 				M.tplayer["pos"]=vmath.vector3(12,screen_h-12,0)				
@@ -2923,13 +3205,21 @@ function M.loadTPLAYERS(self)
 					--other["pos"]=vmath.vector3(screen_w/2,screen_h/2,0)
 				end
 				other["human"]=3
+
 				other["blocking"]=actor["blocking"]
 				other["blockingalert"]=actor["blockingalert"]
+				other["blockingpos"]=actor["blockingpos"]
+				other["blockingsize"]=actor["blockingsize"]				
+				
 				other["room"]=actor["startingfrom"]
 				other["anim"]=actor["startinganim"]
 				other["prop"]=actor["startingaprob"]
 				other["suffix"]=actor["startingasuffix"]
-				other["status"]=actor["startingstatus"]
+				if actor["status"] then
+					other["status"]=actor["status"]
+				else
+					other["status"]=actor["startingstatus"]
+				end
 				other["baseinventory"]=actor["baseinventory"]
 				other["kind"]=1				
 				
@@ -2946,7 +3236,7 @@ end
 function M.getblank(self,inventory,general_i)
 	local blank=general_i["blank"]
 	if blank then
-		blank=blank[1]
+		blank=keyadjust(blank)
 		inventory.blankicon=blank["icon"]	
 		inventory.blankiconsel=blank["selecticon"]	
 		inventory.blankiconbar=blank["iconbar"]	
@@ -2961,7 +3251,7 @@ function M.getgrid(self,general_i)
 	local columns,rows
 	local grid=general_i["grid"]
 	if grid then
-		grid=grid[1]
+		grid=keyadjust(grid)
 		columns=grid["columns"] or 4
 		rows=grid["rows"] or 1
 	else
@@ -2974,46 +3264,47 @@ end
 function M.loadbasics(self)
 	M.dlgs=M.game["dlgs"]
 	if M.dlgs then
-		M.dlgs=M.dlgs[1]
+		M.dlgs=keyadjust(M.dlgs)
 	end
 	M.theobjects=M.game["objects"]
 	if M.theobjects then
 		print("loaded objects");
-		M.theobjects=M.theobjects[1]
+		M.theobjects=keyadjust(M.theobjects)
 	end
 	M.theactors=M.game["actors"]
 	if M.theactors then
 		print("loaded actors");
-		M.theactors=M.theactors[1]
+		M.theactors=keyadjust(M.theactors)
 	end
 	M.theactionspool=M.game["actions"]
 	if M.theactionspool then
 		print("loaded actions");
-		M.theactionspool=M.theactionspool[1]
+		M.theactionspool=keyadjust(M.theactionspool)
 		M.theactions=M.theactionspool["base"]
 		if M.theactions then
-			M.theactions=M.theactions[1]		
+			M.theactions=keyadjust(M.theactions)
 		end
 		M.thewalkthru=M.theactionspool["walkthru"]
 		if M.thewalkthru then
-			M.thewalkthru=M.thewalkthru[1]		
+			M.thewalkthru=keyadjust(M.thewalkthru)
 		end
 	end
 	M.thelocations=M.game["locations"]
 	if M.thelocations then
 		print("loaded locations");
-		M.thelocations=M.thelocations[1]
+		M.thelocations=keyadjust(M.thelocations)
 	end
 	M.thescenes=M.game["scenes"]
 	if M.thescenes then
 		print("loaded scenes");
-		M.thescenes=M.thescenes[1]
+		M.thescenes=keyadjust(M.thescenes)
 	end
 end
 
 function M.loadGame(self,name)	
 
-	local systemname=sys.get_sys_info().system_name 
+	local systemname=sys.get_sys_info().system_name 	
+	local info=sys.get_engine_info()
 
 	config.load(self)
 	if config.fullscreen==1 and defos and defos.is_fullscreen()==false then
@@ -3034,10 +3325,22 @@ function M.loadGame(self,name)
 
 	M.resetvars(self)
 
-	M.name=name
+	M.name=name	
 
-	M.gamestring = sys.load_resource("/adv/"..name..".json")
-	M.game = json.decode(M.gamestring)	
+	if systemname=="HTML5" then
+		usehjt=0
+	elseif info.is_debug==0 then
+		usehjt=0
+	end
+
+	if usehjt==1 then
+		M.hotreload(self)
+	elseif usehjt==2 then
+		M.altload(self)
+	else		
+		M.gamestring = sys.load_resource("/adv/"..name..".json")
+		M.game = json.decode(M.gamestring)	
+	end
 
 	M.locstring = sys.load_resource("/adv/json/"..name.."_loc.json")
 	M.loc = json.decode(M.locstring)	
@@ -3051,7 +3354,7 @@ function M.loadGame(self,name)
 	M.general=M.game["general"]
 	if M.general then
 		local title
-		M.general=M.general[1]
+		M.general=keyadjust(M.general)
 		title=M.general["name"]
 		if title then
 			print("game name:"..title);
@@ -3068,7 +3371,7 @@ function M.loadGame(self,name)
 
 	local hud=M.game["hud"]
 	if hud then
-		hud=hud[1]
+		hud=keyadjust(hud)
 
 		M.short=hud["short"]
 		M.slotprefix=hud["slotprefix"]
@@ -3085,7 +3388,7 @@ function M.loadGame(self,name)
 		if virtualrightclick then 
 			local button_selector=hud["button_selector"]
 			if button_selector then
-				button_selector=button_selector[1]
+				button_selector=keyadjust(button_selector)
 				print("loaded buttonselector");
 				M.buttonselector={}
 				M.buttonselector.left=button_selector["lefticon"]
@@ -3099,17 +3402,17 @@ function M.loadGame(self,name)
 
 		local dlgframe=hud["dlg.frame"]
 		if dlgframe then
-			dlgframe=dlgframe[1]
+			dlgframe=keyadjust(dlgframe)
 			if dlgframe then
 				print("loaded dlg.frame");
 				local title=dlgframe["title"]
 				if title then
-					title=title[1]
+					title=keyadjust(title)
 					M.dlgframetitle=title["icon"] or "hframe"	
 				end
 				local body=dlgframe["body"]
 				if body then
-					body=body[1]
+					body=keyadjust(body)
 					M.dlgframebody=body["icon"] or "hframe"	
 				end
 			end
@@ -3121,21 +3424,21 @@ function M.loadGame(self,name)
 		local general_i=hud["inventory"]	
 		if general_i then					
 			print("loaded inventory");
-			general_i=general_i[1]
+			general_i=keyadjust(general_i)
 			M.inventory.anchor=general_i["anchor"] or "topleft"
 			M.inventory.grid=M.getgrid(self,general_i)		
 			M.getblank(self,M.inventory,general_i)				
 			M.inventory.size=M.getsize(general_i["size"],24,24)
 			local cnt=general_i["cnt"]
 			if cnt then
-				cnt=cnt[1]
+				cnt=keyadjust(cnt)
 				M.inventory.cntsize=M.getsize(cnt["size"],10,10)
 			end
 		end	
 		local general_as=hud["actorselector"]	
 		if general_as then		
 			print("loaded actorselector");
-			general_as=general_as[1]
+			general_as=keyadjust(general_as)
 			M.actorselector.anchor=general_as["anchor"] or "topleft"
 			M.actorselector.grid=M.getgrid(self,general_as)		
 			M.getblank(self,M.actorselector,general_as)			
@@ -3247,6 +3550,7 @@ function M.unloadRoom(self,force)
 		fader_request=msg.url(".")
 		fader_request_msg="readytoload"
 		msg.post("hud","fadeout")	
+		--audio.fade_out(self)
 	end
 end
 
@@ -3261,16 +3565,24 @@ function M.loadRoomActors(self,objects,atlas,thisroom)
 		local name=jobj["name"]
 		local visible=jobj["show"]
 		if name=="player" then
-			M.player=factory.create("#actorsfactory",pos,nil,{player=1})					
+			local atlas=M.tplayer.atlas
+			if atlas then
+				M.player=factory.create("#actors"..atlas.."factory",pos,nil,{player=1})		
+			else
+				M.player=factory.create("#actorsfactory",pos,nil,{player=1})								
+			end
 			global_hero=M.player
 			local animset=M.tplayer.animset
 			if animset then
 				msg.post(M.player,"set_name",{name=animset,head=M.tplayer["head_animset"],shadow=M.tplayer["shadow"]})
 			end
 			msg.post(M.player, "set_to",{destination=pos,follow=true})			
+			if M.tplayer.pos then
+				M.tplayer.pos=pos
+			end
 			for z, obj in ipairs(M.elements) do
-				if obj.alert then
-					msg.post(M.player,"addblockingarea",{pos=obj.pos,size=obj.size,name=obj.name})
+				if obj.blockingalert then
+					msg.post(M.player,"addblockingarea",{pos=obj.pos,size=obj.blockingsize,name=obj.name,alert=obj.blockingalert})
 				end
 			end			
 			local suffix=M.tplayer.suffix
@@ -3353,8 +3665,9 @@ function M.loadRoomWalkarea(self,objects,atlas)
 			if M.poly==nil then
 				M.poly={}
 			end
-			reverse(p1.points)
-			table.insert(M.poly,p1)			
+			--reverse(p1.points)
+			M.poly=p1.points
+			--table.insert(M.poly,p1)			
 		end
 	end
 end
@@ -3417,7 +3730,7 @@ function M.loadRoomObjects(self,objects,atlas)
 			if rtdesc==nil then
 				rtdesc=M.thelocations[tobj.name]
 				if rtdesc then					
-					rtdesc=rtdesc[1]
+					rtdesc=rtdesc[1]--rtdesc=keyadjust(rtdesc)
 					if rtdesc.desc then
 						tobj.desc=rtdesc.desc
 					end
@@ -3436,6 +3749,9 @@ function M.loadRoomObjects(self,objects,atlas)
 		if lstatus then
 			tobj.status=lstatus
 		end				
+
+		tobj.blockingalert=M.memory[M.room.."_"..tobj.name.."_blockingalert"]
+		tobj.blockingsize=M.memory[M.room.."_"..tobj.name.."_blockingsize"]
 
 		if tobj.pickable then
 			if table_find(inventory,tobj.desc) == true then
@@ -3602,10 +3918,10 @@ function M.loadtheroom(self)
 		M.theroom=M.thescenes[M.room]	
 	end
 	if M.theroom then
-		M.theroom=M.theroom[1]
+		M.theroom=keyadjust(M.theroom)
 		local template=M.theroom["_"]
 		if template then
-			template=template[1]			
+			template=keyadjust(template)
 			if template.template then
 				M.doroomtemplate(self,nil,nil,nil,template.template)
 			end
@@ -3613,17 +3929,23 @@ function M.loadtheroom(self)
 	end
 end
 
-function M.addactor(self,actor)
+function M.addactor(self,actor,addednow)
 	local pos=actor.pos
 	local size=actor.size
-	local a=factory.create("#actorsfactory",pos,nil,{player=0})
+	local a
 	local name=actor.name
 	local animset=actor.animset
+	local atlas=actor.atlas
+	if atlas then
+		a=factory.create("#actors"..atlas.."factory",pos,nil,{player=0})
+	else
+		a=factory.create("#actorsfactory",pos,nil,{player=0})
+	end
 	if animset then
 		msg.post(a,"set_name",{name=animset,head=actor["head_animset"],shadow=actor["shadow"]})
 	end
-	if pos.y==posy_notdefined then
-		pos.y=M.fixundefinedy(self,actor.name,actor)
+	if pos.y==posy_notdefined or addednow then
+		pos.y=M.fixundefinedy(self,actor.name,actor,addednow)
 	end
 	msg.post(a, "set_to",{destination=pos,ownz=M.ownz})	
 	M.ownz=M.ownz+0.0001
@@ -3634,7 +3956,7 @@ function M.addactor(self,actor)
 	end			
 	local mactor=M.theactors[name]
 	if mactor then
-		mactor=mactor[1]
+		mactor=keyadjust(mactor)
 		if mactor.desc then
 			actor.desc=mactor.desc
 		end
@@ -3651,9 +3973,8 @@ function M.addactor(self,actor)
 	--msg.post(a, "show",{visible=actor["visible"]})	
 	if actor.blocking then
 		local lpos=vmath.vector3(pos.x+size.x/2,pos.y-size.y/2,0)
-		local lsize=size
 		local lname=name
-		msg.post(M.player,"addblockingarea",{pos=pos,size=lsize,name=lname,alert=actor.blockingalert})
+		msg.post(M.player,"addblockingarea",{pos=pos,size=actor.blockingsize,name=lname,alert=actor.blockingalert})
 		--actor.blocking=true
 	end						
 	if actor.leader then		
@@ -3697,12 +4018,13 @@ function M.autosave(self)
 	end
 end
 
-function M.dosetvisited(self,name)
+function M.dosetvisited(self,name,bool)
 	if name and name ~= "" then
-		if M.visited[name]==nil then
-			M.visited[name]=1
+		local what=name.."_visited"
+		if bool==true then
+			M.memory[what]=true
 		else
-			M.visited[name]=M.visited[name]+1
+			M.memory[what]=nil
 		end
 	end
 end
@@ -3724,7 +4046,7 @@ function M.loadRoom(self,name)
 	else
 		if M.lastroom==nil or M.lastroom=="" then
 		else
-			M.dosetvisited(self,M.lastroom)			
+			M.dosetvisited(self,M.lastroom,true)			
 		end
 		M.lastroom=M.room
 	end
@@ -3767,68 +4089,70 @@ function M.loadRoom(self,name)
 	M.loadtheroom(self)
 	
 	local atlas
-	local bkg=M.data["bkg"]
 	local bkgsx=2048
-	if bkg then
-		local img=bkg["name"]
-		local align=bkg["align"]
-		local width=bkg["width"]
-		background_leftshift=0		
-		if width then
-			bkgsx=math.abs(width)
-			background_width=bkgsx
-			if bkgsx<screen_w then
-				background_leftshift=(screen_w-bkgsx)/2
+	if M.data then
+		local bkg=M.data["bkg"]		
+		if bkg then
+			local img=bkg["name"]
+			local align=bkg["align"]
+			local width=bkg["width"]
+			background_leftshift=0		
+			if width then
+				bkgsx=math.abs(width)
+				background_width=bkgsx
+				if bkgsx<screen_w then
+					background_leftshift=(screen_w-bkgsx)/2
+				end
 			end
+			atlas=bkg["atlas"]				
+			if align==nil then
+				align=M.general["bkgalign"]
+			end
+			if align then
+				M.bkg=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),align=hash(align)})			
+			else
+				M.bkg=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img)})			
+			end
+			msg.post(M.bkg, "update")
+		end	
+		local objects=M.data["objects"]
+		local objectstemplate=nil
+		if objects then
+			M.loadRoomObjects(self,objects,atlas)
 		end
-		atlas=bkg["atlas"]				
-		if align==nil then
-			align=M.general["bkgalign"]
+		local actors=M.data["actors"]
+		if actors then
+			M.loadRoomActors(self,actors,atlas,M.room)
+		end	
+		local movearea=M.data["movearea"]
+		if movearea then
+			M.loadRoomWalkarea(self,movearea,atlas)
+		end		
+		local efx=M.data["efx"]
+		if efx then
+			local img=efx["name"]
+			local align=efx["align"]
+			local width=efx["width"]
+			if width then
+				bkgsx=math.abs(width)
+			end
+			atlas=efx["atlas"]				
+			if align==nil then
+				align=M.general["bkgalign"]
+			end
+			if align then
+				M.efx=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),efx=1,align=hash(align)})			
+			else
+				M.efx=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),efx=1})			
+			end
+			msg.post(M.efx, "update")
 		end
-		if align then
-			M.bkg=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),align=hash(align)})			
-		else
-			M.bkg=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img)})			
-		end
-		msg.post(M.bkg, "update")
-	end	
-	local objects=M.data["objects"]
-	local objectstemplate=nil
-	if objects then
-		M.loadRoomObjects(self,objects,atlas)
-	end
-	local actors=M.data["actors"]
-	if actors then
-		M.loadRoomActors(self,actors,atlas,M.room)
-	end	
-	local movearea=M.data["movearea"]
-	if movearea then
-		M.loadRoomWalkarea(self,movearea,atlas)
-	end		
-	local efx=M.data["efx"]
-	if efx then
-		local img=efx["name"]
-		local align=efx["align"]
-		local width=efx["width"]
-		if width then
-			bkgsx=math.abs(width)
-		end
-		atlas=efx["atlas"]				
-		if align==nil then
-			align=M.general["bkgalign"]
-		end
-		if align then
-			M.efx=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),efx=1,align=hash(align)})			
-		else
-			M.efx=factory.create("#back"..atlas.."factory",nil,nil,{anim=hash(img),efx=1})			
-		end
-		msg.post(M.efx, "update")
 	end
 	M.ownz=0.0001
 	for j,actor in ipairs(M.tplayers) do	
 		if actor==M.tplayer then
 		elseif actor.room==M.room or (M.tplayer.room==M.room and M.tplayer.follower and M.tplayer.follower[actor.name]==true) then
-			M.addactor(self,actor)
+			M.addactor(self,actor,actor.room~=M.room)
 		end
 	end
 	for j,actor in ipairs(M.tplayers) do	
@@ -3892,7 +4216,8 @@ function M.loadRoom(self,name)
 			M.tplayer.reloadpos=nil
 		end
 		local CMD=M.cmds
-		if M.visited[M.room]==nil then
+		local visitedroom=M.room.."_visited"
+		if M.memory[visitedroom]==nil then
 			if M.onfirstskip then
 			else
 				local config=M.getcmd(self,"_","onconfig")
@@ -3903,7 +4228,10 @@ function M.loadRoom(self,name)
 			end
 			--M.visited[M.room]=1
 		else
-			--M.visited[M.room]=M.visited[M.room]+1
+			local config=M.getcmd(self,"_","onconfigupdate")
+			if config then 
+				M.playsilentcommands(self,bkgsx,CMD,config) 
+			end
 			first=M.getcmd(self,"_","onnext")
 		end
 		local onenter=M.getcmd(self,"_","onenter")
@@ -4182,8 +4510,8 @@ function M.handle_cursormovements(self,action)
 					herosize=M.tplayer["size"] 
 				end
 				if activity==0 and heropos then
-					M.tplayer.pos.x=heropos.x
-					M.tplayer.pos.y=heropos.y+herosize.y/4
+					-- M.tplayer.pos.x=heropos.x
+					-- M.tplayer.pos.y=heropos.y+herosize.y/4
 					--M.tplayer.size.x=herosize.x/2
 					--M.tplayer.size.y=herosize.y/2
 					if M.pointinObject(self,M.tplayer,dest) then 
@@ -4410,17 +4738,7 @@ function M.handle_onkeyevents(self,action_id,action)
 					M.jumpto="cutscene_giveusthedevice"
 					M.unloadRoom(self)
 				else
-					local jsonfile="C:/tmp/main.json"
-					local file=io.open(jsonfile,"r")
-					if file then
-						io.input(file)
-						local gamestring=io.read("*all")
-						io.close(file)		
-						os.remove(jsonfile)	
-						M.game = json.decode(gamestring)	
-						M.loadbasics(self)
-						M.loadtheroom(self)					
-					end
+					M.hotreload(self,true)					
 				end
 			end
 		end
@@ -4490,6 +4808,44 @@ function M.resetaction(self)
 	msg.post("hud","setactionprefix",{prefix=nil})
 end
 
+function M.handlewalkarea(self,heropos,herosize,dest)
+	local sdest=nil
+	if M.poly then
+		local yoff=herosize.y/2
+		local tdest=vmath.vector3(dest.x,dest.y,0)
+		local startpos=vmath.vector3(heropos.x,(heropos.y-yoff),0)
+		local endpos=vmath.vector3(dest.x,dest.y,0)			
+		-- se sono come selezione nel path quella è la destinazione dei piedi
+
+		sdest=pathfinder.findpath(startpos,endpos,M.poly)
+		if sdest and sdest[1] then
+			if sdest[2] then
+				for i, v in ipairs(sdest) do
+					sdest[i].y=sdest[i].y+yoff
+				end
+			else
+				dest.x=sdest[1].x
+				dest.y=sdest[1].y+yoff
+				sdest=nil
+			end
+		else
+			dest.x=endpos.x
+			dest.y=endpos.y+yoff
+		end
+
+
+	elseif M.rectarea then
+		dest.y=heropos.y							
+		if dest.x > M.rectarea.x+M.rectarea.w then
+			dest.x = M.rectarea.x+M.rectarea.w
+		end
+		if dest.x < M.rectarea.x then
+			dest.x = M.rectarea.x
+		end
+	end		
+	return sdest,dest
+end
+
 function M.walkto(self,dest,tomovedit)
 	if tomovedit then
 	else
@@ -4498,67 +4854,12 @@ function M.walkto(self,dest,tomovedit)
 	local herosize=M.tplayer["size"]
 	local h=herosize.y
 	local result, points,forceddest
+	local sdest=nil
 
 	if M.player then heropos=gop.get(M.player).rposition end --go.get_position(M.player)
 	if heropos then		
-		if M.poly then
-			local yoff=herosize.y*2/4
-			local tdest=vmath.vector3(dest.x,dest.y,0)
-			local startpos=vmath.vector3(heropos.x,(heropos.y-yoff),0)
-			local endpos=vmath.vector3(dest.x,(dest.y-yoff),0)
-			if dest.y<heropos.y-yoff then
-				--dest.y=dest.y+yoff
-			elseif dest.y>heropos.y+yoff*2/3 then
-				--dest.y=dest.y-(yoff-yoff*1/3)
-			elseif dest.y<=heropos.y+yoff*2/3 and dest.y>=heropos.y-yoff then
-				--dest.y=heropos.y
-			end
-			endpos.y=dest.y-yoff
-
-			if not pathfind.pointInPolygonSet(endpos.x,endpos.y,M.poly) then
-				local points=pathfind.findLimit(startpos,endpos,M.poly)
-				if points then
-					dest.x=points.x
-					dest.y=points.y+yoff
-					endpos.x=points.x
-					endpos.y=points.y
-				end
-			end
-			
-			-- still in development
-			local result, points=pathfind.findPath(startpos,endpos,M.poly)
-			if result==true then
-				if points then
-					dest.x=points[1].x
-					dest.y=points[1].y
-					dest.y=heropos.y
-					dest.x=heropos.x
-				else
-					dest.x=dest.x
-					dest.y=dest.y
-				end
-			else
-				points=pathfind.findLimit(startpos,endpos,M.poly)
-				if points then
-					dest.x=points.x
-					dest.y=points.y+yoff
-					dest.y=heropos.y
-					dest.x=heropos.x
-				else
-					dest.y=heropos.y
-					dest.x=heropos.x					
-				end
-			end
-		elseif M.rectarea then
-			dest.y=heropos.y							
-			if dest.x > M.rectarea.x+M.rectarea.w then
-				dest.x = M.rectarea.x+M.rectarea.w
-			end
-			if dest.x < M.rectarea.x then
-				dest.x = M.rectarea.x
-			end
-		end					
-	end							
+		sdest,dest=M.handlewalkarea(self,heropos,herosize,dest)
+	end
 	msg.post(M.player, "move_to",{destination=dest,sdestination=sdest})			
 end
 
@@ -4836,7 +5137,27 @@ end
 function M.update(self,dt)
 	local CMD=M.cmds
 	if M.dialogcmd then
-		CMD=M.dialogcmd
+		if CMD.waitfor == advcmd.WAITFORANIM then
+			if M.skipscene then CMD.animcnt=nil end
+			if CMD.animcnt==nil then
+				CMD.waitfor=-1
+				if advcmd.ANIMSELECTED then
+					msg.post(advcmd.ANIMSELECTED,"unlockanim")
+					advcmd.ANIMSELECTED=nil
+				end
+				--M.playcommands(self,CMD)
+			end
+			return
+		elseif CMD.waitfor == advcmd.WAITFORMOVEMENT then
+			if M.skipscene then CMD.movecnt=nil end
+			if CMD.movecnt==nil then
+				CMD.waitfor=-1
+				--M.playcommands(self,CMD)
+			end
+			return
+		else
+			CMD=M.dialogcmd
+		end
 	end
 	audio.update(self,dt)
 	if CMD.commands then		
@@ -4987,7 +5308,7 @@ function M.load(self,name)
 		if myfile and myfile["room"] then
 			local room=myfile["room"]
 
-			M.visited=myfile["visited"]
+			
 			M.tasks=myfile["tasks"]
 			M.memory=myfile["memory"]
 			M.lastmusic=myfile["lastmusic"]
@@ -5016,7 +5337,9 @@ function M.load(self,name)
 				M.doselcharacter(self,nil,"selcharacter",nil,M.playername)
 			end
 			
-			M.reloadpos=myfile["playerpos"]			
+			M.reloadpos=myfile["playerpos"]		
+
+			M.activeplayername=myfile["activeplayername"]
 			
 			M.lastroom=""
 			if myfile["lastroom"] then
@@ -5041,7 +5364,7 @@ function M.save(self,name)
 	
 	myfile["room"]=M.room
 	myfile["lastroom"]=M.lastroom
-	myfile["visited"]=M.visited
+	
 	myfile["tasks"]=M.tasks
 	myfile["memory"]=M.memory
 	myfile["lastmusic"]=M.lastmusic
@@ -5058,6 +5381,8 @@ function M.save(self,name)
 	myfile["playername"]=M.playername
 	
 	myfile["playerpos"]=gop.get(M.player).rposition--go.get_position(M.player)
+
+	myfile["activeplayername"]=M.activeplayername
 	
 	sys.save(my_file_path, myfile)
 end

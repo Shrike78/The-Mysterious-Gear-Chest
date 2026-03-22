@@ -7,19 +7,30 @@ M.DELAY = 1
 M.gain = 0
 M.time = 1
 M.in_fade_now = 0
-M.speed = 0.25
-M.gainratio = 0.1
+M.speed = 1
+M.gainratio = 1
 
-function M.fade_in(self) 
+function M.fade_in(self,fadeintimer) 
 	M.in_fade_now = 1
-	M.time=1
+	if fadeintimer then
+		M.time=fadeintimer
+	else
+		M.time=1
+	end
+	M.fadetime=M.time
 	M.gain=0
 end
 
-function M.fade_out(self) 
-	M.in_fade_now = 2
+function M.fade_out(self,fadetime) 
+	M.in_fade_now = 2	
 	M.time=1
-	M.gain=1
+	if fadetime then
+		M.time=fadetime
+	end
+	M.fadetime=M.time
+	if M.gain<1 then
+		M.time=M.fadetime*M.gain
+	end
 end
 
 function M.update(self,dt)
@@ -35,12 +46,15 @@ function M.update(self,dt)
 			M.in_fade_now=0
 		else
 			if M.in_fade_now==1 then
-				M.gain=1-(M.time)
+				M.gain=(M.fadetime-M.time)/M.fadetime
 			else
-				M.gain=(M.time)
+				M.gain=M.time/M.fadetime
 			end
 		end
-		msg.post(M.music, "set_gain", {gain = M.gain*M.gainratio})
+		--print("gain: "..M.gain*M.gainratio.." time : "..M.time.." fadetime: "..M.fadetime)
+		if M.music then
+			msg.post(M.music, "set_gain", {gain = M.gain*M.gainratio})
+		end
 	end
 end
 
@@ -53,12 +67,12 @@ function M.stopmusic(self)
 	end	
 end
 
-function M.playmusic(self,music)
+function M.playmusic(self,music,fadeintimer,fadeouttimer)
 	M.stopmusic(self)
 	M.music=music
 	if config.music==1 then 		
 		msg.post(M.music,"play_sound",{gain = 0})
-		M.fade_in(self)
+		M.fade_in(self,fadeintimer)
 	end	
 end
 

@@ -2,6 +2,8 @@ local audio = require "adv/lua/audio"
 local config = require "adv/lua/config"
 local appname=sys.get_config("project.title")
 
+localgamepath="."
+
 loaded_scene=""
 next_scene=""
 
@@ -12,7 +14,7 @@ local screennumber=1
 function screenshot_get(self)
 	if  screenshot~= nil then
 		local png, w, h = screenshot.png()
-		local name="screenshot"..screennumber..".png"
+		local name=localgamepath.."publish/screenshot"..screennumber..".png"
 		local f = io.open(name, "wb")
 		f:write(png)
 		f:flush()
