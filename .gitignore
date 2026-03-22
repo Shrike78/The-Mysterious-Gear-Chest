@@ -11,3 +11,4 @@ debug.keystore
 debug.keystore.pass.txt
 *.jar
 /.editor_settings
+/.defold/api

@@ -16,7 +16,8 @@
     ],
     "Lua.workspace.library": [
         "~/Library/Application Support/Code/User/globalStorage/astronachos.defold",
-        "~/Library/Application Support/Code/User/workspaceStorage/87fe5af95964ec7031656456200136b1/astronachos.defold"
+        "~/Library/Application Support/Code/User/workspaceStorage/87fe5af95964ec7031656456200136b1/astronachos.defold",
+        ".defold/api"
     ],
     "glsllint.additionalStageAssociations": {
         ".fp": "frag",
@@ -60,6 +61,35 @@
         "*.manifest": "textproto",
         "*.appmanifest": "yaml",
         "*.script_api": "yaml",
-        "ext.manifest": "yaml"
+        "ext.manifest": "yaml",
+        "*.lua_": "lua"
+    },
+    "editor.snippetSuggestions": "bottom",
+    "editor.suggest.showKeywords": false,
+    "Lua.workspace.ignoreDir": [
+        ".vscode",
+        ".defold/api",
+        "build"
+    ],
+    "Lua.diagnostics.ignoredFiles": "Disable",
+    "Lua.diagnostics.globals": [
+        "init",
+        "final",
+        "update",
+        "fixed_update",
+        "on_message",
+        "on_input",
+        "on_reload"
+    ],
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bower_components": true,
+        "**/*.code-search": true,
+        "undefined/**": true,
+        "**/build/**": true,
+        "patches/": true,
+        "**/*.collection": true,
+        "**/*.atlas": true,
+        "**/icon_*.png": true
     }
 }
