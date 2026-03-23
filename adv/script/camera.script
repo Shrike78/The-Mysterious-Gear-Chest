@@ -2,7 +2,6 @@ local world_width = screen_w
 local world_height = screen_h
 local area_width = 595
 local area_height = 200
-local tile_width = TILEMAP_WIDTH
 
 camerapos=vmath.vector3()
 
