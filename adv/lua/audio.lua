@@ -84,12 +84,12 @@ end
 
 local function complete_function(self, message_id, message, sender)
 	-- do something when sound ends
-	sound.stop(url)
+	-- sound.stop(sender)
 end
 
 function M.playvoice(self,soundurl)
 	if config.sound==1 then 
-		sound.play(soundurl,{gain = 1.0},complete_function)		
+		sound.play(soundurl,{gain = 1.0},complete_function)
 	end
 end
 
