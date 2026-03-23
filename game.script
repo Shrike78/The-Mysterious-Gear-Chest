@@ -1,7 +1,9 @@
+--disable for screenshot reference
+---@diagnostic disable: undefined-global
 local audio = require "adv/lua/audio"
 local config = require "adv/lua/config"
+---@diagnostic disable-next-line: undefined-field
 local appname=sys.get_config("project.title")
-
 localgamepath="."
 
 loaded_scene=""
@@ -16,9 +18,11 @@ function screenshot_get(self)
 		local png, w, h = screenshot.png()
 		local name=localgamepath.."publish/screenshot"..screennumber..".png"
 		local f = io.open(name, "wb")
-		f:write(png)
-		f:flush()
-		f:close()
+		if f then
+			f:write(png)
+			f:flush()
+			f:close()
+		end
 		screennumber=screennumber+1
 	end
 end
@@ -33,7 +37,7 @@ end
 -- Win Helpers
 
 function touchinside(url,action,dadurl)
-	local go_scale = go.get_scale_vector(url)
+	local go_scale = go.get_scale(url)
 	local sprite_scale = go.get(url, "scale")
 	local size = go.get(url, "size")
 	local pos = go.get_position(url)	
