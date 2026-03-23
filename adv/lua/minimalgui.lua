@@ -28,7 +28,7 @@ local function on_animation_done(self, url, property)
 	end
 end
 
-function handle_touch(self,x,y,bpressed,breleased,dad)
+function handle_touch(self,x,y,bpressed,breleased)
 	local abtns=self.abtns
 	if self.dlgabtns then abtns=self.dlgabtns end
 	for i,obj in ipairs(abtns) do
@@ -488,12 +488,12 @@ function gui_on_message(self, message_id, message, sender)
 			for i, tpoint in ipairs(message.action.touch) do
 				local x=tpoint.x*world_scale_x
 				local y=tpoint.y*world_scale_y
-				handle_touch(self,x,y,tpoint.pressed,tpoint.released,pressed)
+				handle_touch(self,x,y,tpoint.pressed,tpoint.released)
 			end	
 		else 
 			local x=message.action.x*world_scale_x
 			local y=message.action.y*world_scale_y
-			handle_touch(self,x,y,message.action.pressed,message.action.released,pressed)
+			handle_touch(self,x,y,message.action.pressed,message.action.released)
 		end								
 	end
 end
