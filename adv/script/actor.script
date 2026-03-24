@@ -25,8 +25,8 @@ function init(self)
 	self.normalspeed=64
 	self.alwaysusewalk=true
 	self.lock=0
-	self.width=go.get("#sprite", "size.x")
-	self.height=go.get("#sprite", "size.y")	
+	local size = go.get("#sprite", "size")
+	self.width, self.height = size.x, size.y
 	self.rposition=vmath.vector3()	
 	self.position=vmath.vector3()
 	self.movedelta=vmath.vector3()
@@ -82,8 +82,8 @@ end
 function digitalizeactor(self)
 	if 1== 0 then
 	else
-		local width=go.get("#sprite", "size.x")
-		local height=go.get("#sprite", "size.y")
+		local size = go.get("#sprite", "size")
+		local width, height = size.x, size.y
 		self.rposition.x=math.floor(self.position.x)
 		self.rposition.y=math.floor(self.position.y)
 		if(width % 2 == 1) then
@@ -105,8 +105,8 @@ end
 
 function update(self, dt)			
 	if self.updatesize then
-		self.width=go.get("#sprite", "size.x")
-		self.height=go.get("#sprite", "size.y")
+		local size = go.get("#sprite", "size")
+		self.width, self.height = size.x, size.y
 		self.updatesize=nil
 		if self.speedadjust then
 			self.speed=math.floor(self.width*2.0)
@@ -505,8 +505,8 @@ function on_message(self, message_id, message, sender)
 	elseif message_id==hash("stop") then	
 		self.stop=true
 	elseif message_id==hash("update_size") then
-		self.width=go.get("#sprite", "size.x")
-		self.height=go.get("#sprite", "size.y")		
+		local size = go.get("#sprite", "size")
+		self.width, self.height = size.x, size.y
 	elseif message_id==hash("set_leader") then
 		self.leader=message.leader
 		if message.leader then			
