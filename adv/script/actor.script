@@ -42,7 +42,7 @@ function init(self)
 end
 
 function calcmovedelta(self)
-	local curpos=go.get_position(pos)
+	local curpos=go.get_position()
 	local dist=math.sqrt((curpos.x-self.destination.x)*(curpos.x-self.destination.x)+(curpos.y-self.destination.y)*(curpos.y-self.destination.y))
 	local deltax=self.destination.x-curpos.x
 	local deltay=self.destination.y-curpos.y
@@ -364,7 +364,7 @@ function on_message(self, message_id, message, sender)
 			local l=1
 		end		
 	elseif message_id==hash("move_to") then		
-		local curpos=go.get_position(pos)
+		local curpos=go.get_position()
 		if message.xonly==true then
 			local pos
 			self.destination=curpos
