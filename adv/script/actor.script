@@ -537,7 +537,6 @@ function on_message(self, message_id, message, sender)
 		end		
 		self.idle=true
 		msg.post(".","update_size")
-		local offset=vmath.vector3(0,self.height/2,0)
 		
 		self.position=go.get_position()		
 		--self.position.z=10.1+0.5-((self.position.y-self.height/2)/screen_h)*0.5
