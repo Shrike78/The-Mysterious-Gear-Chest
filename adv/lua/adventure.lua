@@ -1202,13 +1202,12 @@ function M.dosetpos(self,CMD,cmd,cmdobj,val)
 
 		if actor then
 			actor.pos.x=pos_x
-			if xonly then
-			else
+			if not xonly then
 				actor.pos.y=pos_y
 			end
+			msg.post(actorobj, "set_to",{destination=actor.pos,xonly=xonly,follow=-1})	
 		end
 		
-		msg.post(actorobj, "set_to",{destination=actor.pos,xonly=xonly,follow=-1})	
 	end
 end
 
@@ -1466,11 +1465,11 @@ function M.doselcharacter(self,CMD,cmd,cmdobj,val)
 end
 
 function M.dosetcharacterdesc(self,CMD,cmd,cmdobj,val)
-	M.changeactorselectorattr(sel,cmdobj,val,nil)
+	M.changeactorselectorattr(self,cmdobj,val,nil)
 end
 
 function M.dosetcharactericon(self,CMD,cmd,cmdobj,val)
-	M.changeactorselectorattr(sel,cmdobj,nil,val)
+	M.changeactorselectorattr(self,cmdobj,nil,val)
 end
 
 function M.dodelcharacter(self,CMD,cmd,cmdobj,val)
@@ -1528,19 +1527,23 @@ function M.doreloadgame(self,CMD,cmd,cmdobj,val)
 end
 
 function M.dosaveactor(self,CMD,cmd,cmdobj,val)
+	--[[
 	local actorobj=M.player
 	local actor=M.tplayer
 	if val then
 		actor,actorobj=M.getselectedfromname(self,val)									
 	end
+	--]]
 end
 
 function M.dosrestoreactor(self,CMD,cmd,cmdobj,val)
+	--[[
 	local actorobj=M.player
 	local actor=M.tplayer
 	if val then
 		actor,actorobj=M.getselectedfromname(self,val)									
 	end
+	--]]
 end
 
 function M.doresetanim(self,CMD,cmd,cmdobj,val)
@@ -4577,7 +4580,7 @@ function M.toggle_fullscreen(self,skipsay)
 		if CMD.commands==nil then
 			if defos and defos.is_fullscreen() then
 				config.fullscreen=0				
-				if commands==nil and skipsay==nil then	
+				if skipsay==nil then	
 					if M.short then
 					else
 						advcmd.setcommand(self,CMD,"say","Good, now the world looks better")					
@@ -4586,7 +4589,7 @@ function M.toggle_fullscreen(self,skipsay)
 				end
 			else
 				config.fullscreen=0
-				if commands==nil and skipsay==nil then
+				if skipsay==nil then
 					if M.short then
 					else
 						advcmd.setcommand(self,CMD,"say","Uh, now the world looks smaller")
